@@ -1,0 +1,368 @@
+# Programmer:  Patrick Junhee Kim 
+# Date: 2022/7/4 
+# Game name: Tetris 
+# Solution: Using python(visual studio) and pygame to make a tetris game
+
+import sys
+from math import sqrt
+from random import randint
+import pygame
+ 
+#Basic functions:
+pygame.init()
+smallfont = pygame.font.SysFont(None, 36)
+largefont = pygame.font.SysFont(None, 72)
+ 
+pygame.key.set_repeat(30, 30)
+BLACK = (0,0,0)
+# Screen size: SCREEN_WIDTH and SCREEN_HEIGHT, which mean the size of the entire game board.
+SCREEN_WIDTH = 600
+SCREEN_HEIGHT = 600
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+clock = pygame.time.Clock() # Using for dropping
+# WIDTH means the number of columns of PIECE that make up FIELD
+WIDTH = 12
+#HEIGHT means the number of rows in the PIECE parts that make FIELD
+HEIGHT = 22
+#INTERVAL means the drop interval
+INTERVAL = 40
+# FIELD means the FILED refers to the plate where Tetris games are played
+# and it is also a space to maintain the state of the blocks.
+FIELD = []
+#colors of blocks: red, blue,green,orange, yellow, skyblue, purple
+#colors of backgrounds: black, gray
+COLOR = ((0, 0, 0), (255, 165, 0), (0, 0, 255), (0, 255, 255), \
+          (0, 255, 0), (255, 0, 255), (255, 255, 0), (255, 0, 0), (128, 128, 128))
+#Block section
+BLOCK = None # current block
+NEXT_BLOCK = None
+PIECE_SIZE = 24 # Piece size(one of the small piece) 24 x 24
+PIECE_GRID_SIZE = PIECE_SIZE+1  # Express grid with spaces between PIECEㄴ
+BLOCK_DATA = (
+    ( # one dimensional data
+      #first block  # Types of blocks (with rotations of its)
+        (0, 0, 1, \
+         1, 1, 1, \
+         0, 0, 0),
+        (1, 1, 0, \
+         0, 1, 0, \
+         0, 1, 0),
+        (0, 0, 0, \
+         1, 1, 1, \
+         1, 0, 0),
+        (0, 1, 0, \
+         0, 1, 0, \
+         0, 1, 1),
+        #second block
+    ), (
+        (2, 0, 0, \
+         2, 2, 2, \
+         0, 0, 0),
+        (0, 0, 0, \
+         2, 2, 2, \
+         0, 0, 2),
+        (0, 2, 2, \
+         0, 2, 0, \
+         0, 2, 0),
+        (0, 2, 0, \
+         0, 2, 0, \
+         2, 2, 0)
+       # Third block
+    ), (
+        (0, 0, 0, 0, \
+         3, 3, 3, 3, \
+         0, 0, 0, 0, \
+         0, 0, 0, 0),
+        (0, 0, 0, 0, \
+         0, 0, 0, 0, \
+         3, 3, 3, 3, \
+         0, 0, 0, 0),
+        (0, 3, 0, 0, \
+         0, 3, 0, 0, \
+         0, 3, 0, 0, \
+         0, 3, 0, 0),
+        (0, 0, 3, 0, \
+         0, 0, 3, 0, \
+         0, 0, 3, 0, \
+         0, 0, 3, 0)
+        # Fourth block
+    ), (
+        (4, 4, \
+        4, 4),
+        (4, 4, \
+        4, 4),
+        (4, 4, \
+        4, 4),
+        (4, 4, \
+        4, 4)
+       # Fifth block  
+   ), (
+        (0, 5, 0, \
+         5, 5, 5, \
+         0, 0, 0),
+        (0, 5, 0, \
+         0, 5, 5, \
+         0, 5, 0),
+        (0, 0, 0, \
+         5, 5, 5, \
+         0, 5, 0),
+        (0, 5, 0, \
+         5, 5, 0, \
+         0, 5, 0)
+        # sixth block
+   ), (
+        (0, 6, 6, \
+         6, 6, 0, \
+         0, 0, 0),
+        (0, 6, 0, \
+         0, 6, 6, \
+         0, 0, 6),
+        (0, 0, 0, \
+         0, 6, 6, \
+         6, 6, 0),
+        (6, 0, 0, \
+         6, 6, 0, \
+         0, 6, 0)
+        # seventh block
+    ), (
+        (7, 7, 0, \
+         0, 7, 7, \
+         0, 0, 0),
+        (0, 0, 7, \
+         0, 7, 7, \
+         0, 7, 0),
+        (0, 0, 0, \
+         7, 7, 0, \
+         0, 7, 7),
+        (0, 7, 0, \
+         7, 7, 0, \
+         7, 0, 0)
+    )
+)
+# Block needs shape, rotation, coordinates
+class Block:    
+    def __init__(self, count):
+        self.turn = randint(0,3) # randomly expressing of block's rotations
+        self.type = BLOCK_DATA[randint(0, 6)] # randomly expressing of block's shapes
+        self.data = self.type[self.turn] # One-dimensional data that makes up a block
+        self.size = int(sqrt(len(self.data))) # size of block
+        self.xpos = randint(2, 8 - self.size) # x coordinates
+        self.ypos = 1 - self.size # y coordinates
+        self.fire = count + INTERVAL # Drop start time
+ 
+    def update(self, count):    #Role to update block status to FILED
+        erased = 0   # remembering the current tetris condition as Blocks are stacked
+        if overlapped(self.xpos, self.ypos + 1, self.turn):
+            # Function that returns True when colliding with other blocks
+            # If crash occurs when going down 1 space on the y-axis, update FIELD to remember the stacked blocks
+            for y_offset in range(BLOCK.size):
+                for x_offset in range(BLOCK.size):
+                    index = y_offset * self.size + x_offset
+                    val = BLOCK.data[index]
+                    if 0 <= self.ypos+y_offset < HEIGHT and \
+                       0 <= self.xpos+x_offset < WIDTH and val != 0:
+                            FIELD[self.ypos+y_offset][self.xpos+x_offset] = val # Fill in the value and delete it through line_erase()
+            #Clear all rows / Function that returns the number of rows cleared
+            erased = line_erase()
+            #Create a block object by switching the next block to the current block
+            go_next_block(count)
+ 
+        if self.fire < count:
+            self.fire = count + INTERVAL
+            self.ypos += 1
+        return erased
+ 
+    def draw(self): # because self data is one dimensional data. this helps to make two dimensional data using index
+        # Using two x_offset, y_offset and make a double for loop
+         for y_offset in range(self.size):
+            for x_offset in range(self.size):
+                index = y_offset * self.size + x_offset
+                val = self.data[index]
+                if 0 <= y_offset + self.ypos < HEIGHT and \
+                   0 <= x_offset + self.xpos < WIDTH and val != 0:
+                    f_xpos = PIECE_GRID_SIZE + (x_offset + self.xpos) * PIECE_GRID_SIZE
+                    f_ypos = PIECE_GRID_SIZE + (y_offset + self.ypos) * PIECE_GRID_SIZE
+                    pygame.draw.rect(screen, COLOR[val],
+                                    (f_xpos,
+                                    f_ypos,
+                                    PIECE_SIZE,
+                                    PIECE_SIZE))
+#Clear all rows / Function that returns the number of rows cleared
+# Plus if the row come be straight clear line, it deletes and score adds 200
+def line_erase():
+    erased = 0
+    ypos = HEIGHT-2
+    print(FIELD[ypos])
+    while ypos >=0:
+        if  all(FIELD[ypos]) == True:
+            del FIELD[ypos]
+            FIELD.insert(0, [8, 0,0,0,0,0,0,0,0,0,0 ,8])
+            erased += 1
+        else:
+            ypos -= 1
+    return erased
+ 
+#Checking that game over or not
+def check_game_over():
+    filled = 0
+    for cell in FIELD[0]: # FIELD[0] is the 0th row, so use the for statement
+        if cell != 0: # Count nonzero squares in the top row
+            filled += 1
+    # 2 = the left and right walls
+    return filled > 2
+ 
+ 
+#Making a block and convert to the next block
+def go_next_block(count):
+    global BLOCK, NEXT_BLOCK
+    BLOCK = NEXT_BLOCK if NEXT_BLOCK != None else Block(count)
+    NEXT_BLOCK = Block(count)
+ 
+# Checking that block is overlapping to the wall or the block of the ground
+def overlapped(xpos, ypos, turn):
+    data = BLOCK.type[turn]
+    for y_offset in range(BLOCK.size): # 2 dimensional data
+        for x_offset in range(BLOCK.size):
+            index = y_offset * BLOCK.size + x_offset
+            val = data[index] # color, validity
+            #Checking the block of the ground
+            if 0 <= xpos+x_offset < WIDTH and \
+                0 <= ypos+y_offset < HEIGHT:
+                #Checking the wall block
+                if val != 0 and \
+                    FIELD[ypos+y_offset][xpos+x_offset] != 0:
+                    return True
+    return False
+#setting the block with data
+def set_game_field():
+    for i in range(HEIGHT-1):
+        FIELD.insert(0, [8, 0,0,0,0,0,0,0,0,0,0 ,8])
+   
+    FIELD.insert(HEIGHT-1, [8, 8,8,8,8,8,8,8,8,8,8 ,8])
+# using setting function for making a wall  
+def draw_game_field():
+    for y_offset in range(HEIGHT):
+        for x_offset in range(WIDTH):
+            val = FIELD[y_offset][x_offset]
+            color = COLOR[val]
+            pygame.draw.rect(screen,
+                            color,
+                            (PIECE_GRID_SIZE + x_offset*PIECE_GRID_SIZE,
+                            PIECE_GRID_SIZE + y_offset*PIECE_GRID_SIZE ,
+                            PIECE_SIZE ,
+                            PIECE_SIZE ))
+#drawing a current block
+def draw_current_block():
+    BLOCK.draw()
+ 
+#Drawing a next block
+def draw_next_block():
+    for y_offset in range(NEXT_BLOCK.size):
+        for x_offset in range(NEXT_BLOCK.size):
+            index = y_offset * NEXT_BLOCK.size + x_offset
+            val = NEXT_BLOCK.data[index]
+            #if 0 <= y_offset + self.ypos < HEIGHT and \
+            #   0 <= x_offset + self.xpos < WIDTH and
+            if val != 0: ## If you draw up to zero, the stacked blocks become black instantaneously.
+                ## f_xpos = calculated xpos from field
+                f_xpos = 460 + (x_offset) * PIECE_GRID_SIZE
+                f_ypos = 100 + (y_offset) * PIECE_GRID_SIZE
+                pygame.draw.rect(screen, COLOR[val],
+                                (f_xpos,
+                                f_ypos,
+                                PIECE_SIZE,
+                                PIECE_SIZE))
+#drawing the score
+def make_score(score):
+    score_str = str(score).zfill(6)
+    score_image = smallfont.render(score_str, True, (0, 255, 0))
+    screen.blit(score_image, (500, 30))
+ 
+ 
+#Making gameover message  
+def gameover_message():
+    global INTERVAL
+    game_over=False
+    # making a message "Game Over!"
+    message_one = largefont.render("GAME OVER!",
+                                    # Red sentence
+                                    True, (255,0,0))
+    message_two = message_one.get_rect()
+    message_two.center = (300,200)
+    screen.blit(message_one,message_two)
+ 
+# Main routine
+def runGame():
+    global INTERVAL
+    count = 0
+    score = 0
+    game_over = False
+   
+    go_next_block(INTERVAL)
+ 
+    set_game_field()
+ 
+    while True:
+        clock.tick(10)
+        screen.fill(BLACK)
+ 
+        key = None
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                key = event.key
+            elif event.type == pygame.KEYUP:
+                key = None
+ 
+        game_over = check_game_over()
+        if not game_over:
+            count += 5
+            if count % 1000 == 0:
+                INTERVAL = max(1, INTERVAL - 2)
+            erased = BLOCK.update(count)
+ 
+            if erased > 0:
+                score += (2 ** erased) * 100
+ 
+            # key events section
+            next_x, next_y, next_t = \
+                BLOCK.xpos, BLOCK.ypos, BLOCK.turn
+            if key == pygame.K_UP:
+                next_t = (next_t + 1) % 4
+            elif key == pygame.K_RIGHT:
+                next_x += 1
+            elif key == pygame.K_LEFT:
+                next_x -= 1
+            elif key == pygame.K_DOWN:
+                next_y += 1
+ 
+            if not overlapped(next_x, next_y, next_t):
+                BLOCK.xpos = next_x
+                BLOCK.ypos = next_y
+                BLOCK.turn = next_t
+                BLOCK.data = BLOCK.type[BLOCK.turn]
+ 
+        #Drawing game field
+        draw_game_field()
+ 
+        # Falling block
+        draw_current_block()
+ 
+        # Drawing next block
+        draw_next_block()
+       
+        # Score message
+        make_score(score)
+       
+        # Game over message
+        if game_over:
+            gameover_message()
+ 
+        pygame.display.update()
+       
+ 
+runGame()
+pygame.quit()
+
